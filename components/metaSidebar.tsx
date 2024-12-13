@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import Web3 from "web3";
 
-// Define TypeScript interfaces
 interface TokenConfig {
   address: string;
   symbol: string;
@@ -39,7 +38,14 @@ interface PortfolioData {
 interface CommonTokens {
   [chainId: string]: TokenConfig[];
 }
+interface PriceData {
+  usd: number;
+  usd_24h_change: number;
+}
 
+interface PriceResponse {
+  [key: string]: PriceData;
+}
 // ERC20 ABI type
 const ERC20_ABI = [
   {
@@ -65,7 +71,6 @@ const ERC20_ABI = [
   },
 ] as const;
 
-// Define common tokens with proper typing
 const COMMON_TOKENS: CommonTokens = {
   "1": [
     // Ethereum Mainnet
@@ -93,7 +98,6 @@ interface Chain {
   rpcUrl: string;
 }
 
-// Update window.ethereum type definition
 declare global {
   interface Window {
     ethereum?: {
@@ -125,7 +129,6 @@ const PortfolioSidebar = () => {
   }>({});
 
   useEffect(() => {
-    // Initialize Web3 instances for each chain
     const instances: { [chainId: number]: Web3 } = {};
     CHAINS.forEach((chain) => {
       instances[chain.id] = new Web3(chain.rpcUrl);
@@ -143,7 +146,6 @@ const PortfolioSidebar = () => {
       }
     }
   };
-
   const getTokenBalance = async (
     web3: Web3,
     tokenAddress: string,
@@ -173,17 +175,57 @@ const PortfolioSidebar = () => {
     }
   };
 
-  const fetchTokenPrices = async (symbols: string[]): Promise<any> => {
+  const fetchTokenPrices = async (
+    symbols: string[]
+  ): Promise<PriceResponse> => {
+    // Define stable coins with proper typing
+    const stableCoins: PriceResponse = {
+      usdc: { usd: 1, usd_24h_change: 0 },
+      usdt: { usd: 1, usd_24h_change: 0 },
+      dai: { usd: 1, usd_24h_change: 0 },
+      busd: { usd: 1, usd_24h_change: 0 },
+    };
+
     try {
-      const response = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${symbols.join(
-          ","
-        )}&vs_currencies=usd&include_24hr_change=true`
+      // Filter out stable coins from API call
+      const nonStableSymbols = symbols.filter(
+        (symbol) => !Object.keys(stableCoins).includes(symbol.toLowerCase())
       );
-      return await response.json();
+
+      // Only make API call if there are non-stable coins
+      let apiPrices: PriceResponse = {};
+      if (nonStableSymbols.length > 0) {
+        const response = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${nonStableSymbols.join(
+            ","
+          )}&vs_currencies=usd&include_24hr_change=true`
+        );
+        apiPrices = await response.json();
+      }
+
+      // Combine API prices with stable coin prices
+      const combinedPrices: PriceResponse = {
+        ...apiPrices,
+        ...symbols.reduce((acc: PriceResponse, symbol: string) => {
+          const lowerSymbol = symbol.toLowerCase();
+          if (Object.keys(stableCoins).includes(lowerSymbol)) {
+            acc[symbol] = stableCoins[lowerSymbol];
+          }
+          return acc;
+        }, {}),
+      };
+
+      return combinedPrices;
     } catch (error) {
       console.error("Error fetching prices:", error);
-      return {};
+      // Return stable coin prices in case of error
+      return symbols.reduce((acc: PriceResponse, symbol: string) => {
+        const lowerSymbol = symbol.toLowerCase();
+        if (Object.keys(stableCoins).includes(lowerSymbol)) {
+          acc[symbol] = stableCoins[lowerSymbol];
+        }
+        return acc;
+      }, {});
     }
   };
 

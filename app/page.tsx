@@ -1,8 +1,5 @@
 "use client";
-
 import PortfolioSidebar from "@/components/metaSidebar";
-import MetaMaskSidebar from "@/components/metaSidebar";
-import Image from "next/image";
 
 export default function Home() {
   return (

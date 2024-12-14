@@ -46,7 +46,7 @@ interface PriceData {
 interface PriceResponse {
   [key: string]: PriceData;
 }
-// ERC20 ABI type
+
 const ERC20_ABI = [
   {
     constant: true,
@@ -73,7 +73,6 @@ const ERC20_ABI = [
 
 const COMMON_TOKENS: CommonTokens = {
   "1": [
-    // Ethereum Mainnet
     {
       address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
       symbol: "USDT",
@@ -90,12 +89,55 @@ const COMMON_TOKENS: CommonTokens = {
       decimals: 8,
     },
   ],
+  "42161": [
+    {
+      address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+      symbol: "USDT",
+      decimals: 6,
+    },
+    {
+      address: "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8",
+      symbol: "USDC",
+      decimals: 6,
+    },
+    {
+      address: "0x2f2a2543B76A4166549F7AAb2e75Bef0aefC5B0f",
+      symbol: "WBTC",
+      decimals: 8,
+    },
+    {
+      address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      symbol: "WETH",
+      decimals: 18,
+    },
+  ],
+  "8453": [
+    {
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      symbol: "USDC",
+      decimals: 6,
+    },
+    {
+      address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb",
+      symbol: "DAI",
+      decimals: 18,
+    },
+    {
+      address: "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22",
+      symbol: "cbETH",
+      decimals: 18,
+    },
+  ],
 };
 
 interface Chain {
   id: number;
   name: string;
   rpcUrl: string;
+  nativeCurrency: {
+    symbol: string;
+    decimals: number;
+  };
 }
 
 declare global {
@@ -114,6 +156,28 @@ const CHAINS: Chain[] = [
     id: 1,
     name: "Ethereum",
     rpcUrl: "https://eth.public-rpc.com",
+    nativeCurrency: {
+      symbol: "ETH",
+      decimals: 18,
+    },
+  },
+  {
+    id: 42161,
+    name: "Arbitrum",
+    rpcUrl: "https://arb1.arbitrum.io/rpc",
+    nativeCurrency: {
+      symbol: "ETH",
+      decimals: 18,
+    },
+  },
+  {
+    id: 8453,
+    name: "Base",
+    rpcUrl: "https://mainnet.base.org",
+    nativeCurrency: {
+      symbol: "ETH",
+      decimals: 18,
+    },
   },
 ];
 
@@ -135,6 +199,7 @@ const PortfolioSidebar = () => {
     });
     setWeb3Instances(instances);
   }, []);
+
   const handleAccountClick = async (account: string) => {
     if (expandedAccount === account) {
       setExpandedAccount(null);
@@ -146,6 +211,7 @@ const PortfolioSidebar = () => {
       }
     }
   };
+
   const getTokenBalance = async (
     web3: Web3,
     tokenAddress: string,
@@ -164,7 +230,8 @@ const PortfolioSidebar = () => {
 
   const getETHBalance = async (
     web3: Web3,
-    address: string
+    address: string,
+    decimals: number
   ): Promise<number> => {
     try {
       const balance = await web3.eth.getBalance(address);
@@ -178,7 +245,6 @@ const PortfolioSidebar = () => {
   const fetchTokenPrices = async (
     symbols: string[]
   ): Promise<PriceResponse> => {
-    // Define stable coins with proper typing
     const stableCoins: PriceResponse = {
       usdc: { usd: 1, usd_24h_change: 0 },
       usdt: { usd: 1, usd_24h_change: 0 },
@@ -187,12 +253,10 @@ const PortfolioSidebar = () => {
     };
 
     try {
-      // Filter out stable coins from API call
       const nonStableSymbols = symbols.filter(
         (symbol) => !Object.keys(stableCoins).includes(symbol.toLowerCase())
       );
 
-      // Only make API call if there are non-stable coins
       let apiPrices: PriceResponse = {};
       if (nonStableSymbols.length > 0) {
         const response = await fetch(
@@ -203,7 +267,6 @@ const PortfolioSidebar = () => {
         apiPrices = await response.json();
       }
 
-      // Combine API prices with stable coin prices
       const combinedPrices: PriceResponse = {
         ...apiPrices,
         ...symbols.reduce((acc: PriceResponse, symbol: string) => {
@@ -218,7 +281,6 @@ const PortfolioSidebar = () => {
       return combinedPrices;
     } catch (error) {
       console.error("Error fetching prices:", error);
-      // Return stable coin prices in case of error
       return symbols.reduce((acc: PriceResponse, symbol: string) => {
         const lowerSymbol = symbol.toLowerCase();
         if (Object.keys(stableCoins).includes(lowerSymbol)) {
@@ -234,12 +296,20 @@ const PortfolioSidebar = () => {
     try {
       const newPortfolioData: PortfolioData = {};
       newPortfolioData[address] = {};
+
       for (const chain of CHAINS) {
         const web3 = web3Instances[chain.id];
         if (!web3) continue;
+
         const chainTokens = COMMON_TOKENS[chain.id.toString()];
         if (!chainTokens) continue;
-        const ethBalance = await getETHBalance(web3, address);
+
+        const ethBalance = await getETHBalance(
+          web3,
+          address,
+          chain.nativeCurrency.decimals
+        );
+
         const tokenBalances = await Promise.all(
           chainTokens.map(async (token: TokenConfig) => {
             const balance = await getTokenBalance(
@@ -257,23 +327,28 @@ const PortfolioSidebar = () => {
         );
 
         const nonZeroBalances = [
-          { symbol: "ETH", balance: ethBalance.toString() },
+          {
+            symbol: chain.nativeCurrency.symbol,
+            balance: ethBalance.toString(),
+          },
           ...tokenBalances,
         ].filter((token) => Number(token.balance) > 0);
 
-        // Fetch prices for non-zero balance tokens
         const symbols = nonZeroBalances.map((token) =>
-          token.symbol.toLowerCase() === "eth"
+          token.symbol.toLowerCase() === "eth" ||
+          token.symbol.toLowerCase() === "weth"
             ? "ethereum"
             : token.symbol.toLowerCase()
         );
-        const prices = await fetchTokenPrices(symbols);
-        console.log(prices);
 
-        // Calculate values and create final token data
+        const prices = await fetchTokenPrices(symbols);
+
         const tokens: TokenData[] = nonZeroBalances.map((token) => {
-          const priceData =
-            prices[token.symbol.toLowerCase()] || prices["ethereum"];
+          const priceKey =
+            token.symbol.toLowerCase() === "weth"
+              ? "ethereum"
+              : token.symbol.toLowerCase();
+          const priceData = prices[priceKey] || prices["ethereum"];
           const value = Number(token.balance) * (priceData?.usd || 0);
           return {
             symbol: token.symbol,
@@ -347,7 +422,6 @@ const PortfolioSidebar = () => {
     return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
   };
 
-  // Calculate total portfolio value
   const getTotalPortfolioValue = () => {
     if (!selectedAccount || !portfolioData[selectedAccount]) return 0;
     return Object.values(portfolioData[selectedAccount]).reduce(
@@ -356,7 +430,6 @@ const PortfolioSidebar = () => {
     );
   };
 
-  // Calculate total portfolio 24h change
   const getTotalPortfolioChange = () => {
     if (!selectedAccount || !portfolioData[selectedAccount]) return 0;
     const totalValue = getTotalPortfolioValue();
@@ -370,7 +443,6 @@ const PortfolioSidebar = () => {
       ) / totalValue
     );
   };
-
   return (
     <div className="h-screen w-80 bg-gray-900 text-white p-4 flex flex-col">
       {!isConnected ? (
@@ -426,7 +498,7 @@ const PortfolioSidebar = () => {
                       {Object.entries(portfolioData[account]).map(
                         ([chainId, chainData]: [string, any]) => (
                           <div key={chainId} className="mt-3">
-                            <div className="text-sm font-medium mb-2">
+                            <div className="text-md font-bold mb-2">
                               {
                                 CHAINS.find((c) => c.id === Number(chainId))
                                   ?.name

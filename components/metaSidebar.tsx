@@ -1,13 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import {
-  Wallet,
-  ChevronDown,
-  LogOut,
-  Plus,
-  PieChart,
-  TrendingUp,
-} from "lucide-react";
+import { Wallet, ChevronDown, Plus, PieChart, TrendingUp } from "lucide-react";
 import Web3 from "web3";
 
 interface TokenConfig {
